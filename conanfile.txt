@@ -1,0 +1,12 @@
+[requires]
+ffmpeg/4.4.4
+opencv/4.10.0
+stb/cci.20240531
+glm/cci.20230113
+
+[generators]
+CMakeDeps
+CMakeToolchain
+
+[layout]
+cmake_layout
