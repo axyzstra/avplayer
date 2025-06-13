@@ -1,4 +1,5 @@
 #include "Interface/IVideoDecoder.h"
+#include "Core/SyncNotifier.h"
 
 extern "C" {
 #include <libavcodec/avcodec.h>
@@ -21,11 +22,21 @@ public:
     void Decode(std::shared_ptr<IAVPacket> packet) override;
     void SetListener(IVideoDecoder::Listener* listener) override;
 
+    void Start() override;
+    void Pause() override;
+    void Stop() override;
+
+    int GetVideoHeight() override;
+    int GetVideoWidth() override;
+
 private:
     void CleanContext();
     void DecodeAVPacket();
 
+    void ReleaseVideoPipelineResource();
 
+    void ThreadLoop();
+    void CheckFlushPacket();
 
 private:
     // 监听器
@@ -49,8 +60,12 @@ private:
     std::atomic<int> m_pipelineResourceCount{3};
     std::shared_ptr<std::function<void()>> m_pipelineReleaseCallback;
 
+    // 并发相关
+    std::thread m_thread;
+    std::atomic<bool> m_paused{true};
+    std::atomic<bool> m_abort{false};
+    SyncNotifier m_notifier;
 
 };
-
 
 }

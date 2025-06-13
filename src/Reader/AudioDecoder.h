@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Interface/IAudioDecoder.h"
+#include "Core/SyncNotifier.h"
 extern "C" {
 #include <libavcodec/avcodec.h>
 #include <libavformat/avformat.h>
@@ -21,13 +22,27 @@ public:
 
     void SetStream(struct AVStream* stream) override;
     void SetListener(IAudioDecoder::Listener* listener) override;
+    // 将 packet 放入待解码的队列
     void Decode(std::shared_ptr<IAVPacket> packet) override;
+
+    // 线程相关
+    void Start() override;
+    void Pause() override;
+    void Stop() override;
 
 private:
     // bool DecodeAVPacket(AVPacket* packet);
     // 对 que 中的 packet 进行解码
     void DecodeAVPacket();
+
+    // 刷新包
+    void CheckFlushPacket();
     void CleanupContext();
+
+    void ReleaseAudioPipelineResource();
+
+    // 线程相关
+    void ThreadLoop();
 
 private:
     unsigned int m_taragetChannels;
@@ -36,8 +51,6 @@ private:
     // 监听器，监听状态，发送消息
     IAudioDecoder::Listener* m_listener{nullptr};
     std::recursive_mutex m_listenerMutex;
-
-
 
     // packet 包队列
     std::mutex m_packetQueueMutex;
@@ -51,11 +64,16 @@ private:
     SwrContext* m_swrContext{nullptr};
     AVRational m_timeBase{AVRational{1, 1}};
 
+    // 线程控制
+    std::thread m_thread;
+    std::atomic<bool> m_paused{true};
+    std::atomic<bool> m_abort{false};
+    SyncNotifier m_notifier;
+
     // 释放资源的回调函数
     std::shared_ptr<std::function<void()>> m_pipelineReleaseCallback;
-
     // 对音视频处理管线中的资源流量控制和同步。
-    std::atomic<int> m_pipelineReleaseCount{3};
+    std::atomic<int> m_pipelineResourceCount{3};
 };
 
 }

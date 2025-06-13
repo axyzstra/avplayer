@@ -18,5 +18,9 @@ struct IAudioDecoder {
     virtual void SetStream(struct AVStream* stream) = 0;
     virtual void SetListener(Listener* listener) = 0;
     virtual void Decode(std::shared_ptr<IAVPacket> packet) = 0;
+    
+    virtual void Start() = 0;
+    virtual void Pause() = 0;
+    virtual void Stop() = 0;
 };
 }

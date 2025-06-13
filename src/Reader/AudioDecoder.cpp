@@ -4,7 +4,72 @@
 
 namespace av {
 
-AudioDecoder::AudioDecoder(unsigned int channels, unsigned int sampleRate) : m_taragetChannels(channels), m_taragetSampleRate(sampleRate) {}
+AudioDecoder::AudioDecoder(unsigned int channels, unsigned int sampleRate) : 
+    m_taragetChannels(channels), m_taragetSampleRate(sampleRate) {
+
+        m_pipelineReleaseCallback = std::make_shared<std::function<void()>>([&]() {
+            ReleaseAudioPipelineResource();
+        });
+        m_thread = std::thread(&AudioDecoder::ThreadLoop, this);
+}
+
+AudioDecoder::~AudioDecoder() {
+    Stop();
+    std::lock_guard<std::mutex> lock(m_codecContextMutex);
+    CleanupContext();
+}
+
+void AudioDecoder::Start() {
+    m_paused = false;
+    m_notifier.Notify();
+}
+
+void AudioDecoder::Pause() {
+    m_paused = true;
+}
+
+void AudioDecoder::Stop() {
+    m_abort = true;
+    m_notifier.Notify();
+    if (m_thread.joinable()) {
+        m_thread.join();
+    }
+}
+
+void AudioDecoder::ThreadLoop() {
+    while (true) {
+        m_notifier.Wait(100);
+        if (m_abort) {
+            break;
+        }
+        CheckFlushPacket();
+        if (!m_paused && m_pipelineResourceCount > 0) {
+            DecodeAVPacket();
+        }
+    }
+    // 线程结束时清空 packet 队列
+    {
+        std::lock_guard<std::mutex> lock(m_packetQueueMutex);
+        m_packetQueue.clear();
+    }
+}
+
+void AudioDecoder::CheckFlushPacket() {
+    std::lock_guard<std::mutex> lock(m_packetQueueMutex);
+    if (m_packetQueue.empty()) {
+        return;
+    }
+    auto packet = m_packetQueue.front();
+    if (packet->flags & AVFrameFlag::kFlush) {
+        m_packetQueue.pop_front();
+        avcodec_flush_buffers(m_codecContext);
+
+        auto audioSamples = std::make_shared<IAudioSamples>();
+        audioSamples->flags |= AVFrameFlag::kFlush;
+        std::lock_guard<std::recursive_mutex> lock(m_listenerMutex);
+        if (m_listener) m_listener->OnNotifyAudioSamples(audioSamples);
+    }
+}
 
 IAudioDecoder* IAudioDecoder::Create(unsigned int channels, unsigned int sampleRate) {
     return new AudioDecoder(channels, sampleRate);
@@ -180,7 +245,7 @@ void AudioDecoder::DecodeAVPacket() {
         samples->releaseCallback = m_pipelineReleaseCallback;
         av_free(buffer);
 
-        m_pipelineReleaseCount--;
+        m_pipelineResourceCount--;
 
         // 监听器发送消息通知原始数据准备完毕
         std::lock_guard<std::recursive_mutex> lock(m_listenerMutex);
@@ -203,7 +268,10 @@ void AudioDecoder::Decode(std::shared_ptr<IAVPacket> packet) {
     m_packetQueue.emplace_back(packet);
 }
 
-
+void AudioDecoder::ReleaseAudioPipelineResource() {
+    m_pipelineResourceCount++;
+    m_notifier.Notify();
+}
 
 void AudioDecoder::CleanupContext() {
     if (m_codecContext) {
