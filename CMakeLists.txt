@@ -11,6 +11,7 @@ add_executable(app
     src/Reader/VideoDecoder.cpp
     src/Reader/FileReader.cpp
     src/Core/SyncNotifier.cpp
+    src/Engine/AVSynchronizer.cpp
 )
 
 include_directories(./src)
