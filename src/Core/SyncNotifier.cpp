@@ -9,7 +9,7 @@ void SyncNotifier::Notify() {
 }
 
 
-bool SyncNotifier::Wait(int timeoutInMilliseconds = -1) {
+bool SyncNotifier::Wait(int timeoutInMilliseconds) {
     std::unique_lock<std::mutex> lock(m_mutex);
 
     if (!m_triggered) {

@@ -18,11 +18,79 @@ FileReader::FileReader() {
 }
 
 FileReader::~FileReader() {
+    m_deMuxer->Pause();
     m_audioDecoder = nullptr;
     m_videoDecoder = nullptr;
     m_deMuxer = nullptr;
 }
 
+
+void FileReader::SeekTo(float progress) {
+    if (m_deMuxer) {
+        m_deMuxer->SeekTo(progress);
+    }
+}
+
+void FileReader::Start() {
+    if (m_deMuxer) {
+        m_deMuxer->Start();
+    }
+    if (m_audioDecoder) {
+        m_audioDecoder->Start();
+    }
+    if (m_videoDecoder) {
+        m_videoDecoder->Start();
+    }
+}
+
+void FileReader::Pause() {
+    if (m_deMuxer) {
+        m_deMuxer->Pause();
+    }
+    if (m_audioDecoder) {
+        m_audioDecoder->Pause();
+    }
+    if (m_videoDecoder) {
+        m_videoDecoder->Pause();
+    }
+}
+
+
+void FileReader::Stop() {
+    if (m_deMuxer) {
+        m_deMuxer->Stop();
+    }
+    if (m_audioDecoder) {
+        m_audioDecoder->Stop();
+    }
+    if (m_videoDecoder) {
+        m_videoDecoder->Stop();
+    }
+}
+
+float FileReader::GetDuration() {
+    return m_deMuxer ? m_deMuxer->GetDuration() : 0;
+}
+
+int FileReader::GetVideoWidth() {
+    return m_videoDecoder ? m_videoDecoder->GetVideoWidth() : 0;
+}
+
+int FileReader::GetVideoHeight() {
+    return m_videoDecoder ? m_videoDecoder->GetVideoHeight() : 0;
+}
+
+void FileReader::OnNotifyAudioStream(struct AVStream* stream) {
+    if (m_audioDecoder) {
+        m_audioDecoder->SetStream(stream);
+    }
+}
+
+void FileReader::OnNotifyVideoStream(struct AVStream* stream) {
+    if (m_videoDecoder) {
+        m_videoDecoder->SetStream(stream);
+    }
+}
 
 void FileReader::SetListener(IFileReader::Listener* listener) {
     std::lock_guard<std::recursive_mutex> lock(m_listenerMutex);

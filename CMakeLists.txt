@@ -10,15 +10,12 @@ add_executable(app
     src/Reader/AudioDecoder.cpp
     src/Reader/VideoDecoder.cpp
     src/Reader/FileReader.cpp
+    src/Core/SyncNotifier.cpp
 )
 
 include_directories(./src)
 
 find_package(ffmpeg REQUIRED)
-if(FFmpeg_FOUND)
-    include_directories(${FFmpeg_INCLUDE_DIRS})
-endif()
-
 find_package(glm REQUIRED)
 
 target_link_libraries(app PRIVATE ffmpeg::ffmpeg glm::glm)

@@ -1,6 +1,8 @@
 #pragma once
 #include <mutex>
 #include <chrono>
+#include <atomic>
+#include <condition_variable>
 
 namespace av {
 

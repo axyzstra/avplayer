@@ -1,5 +1,3 @@
-#pragma once
-
 #include "AudioDecoder.h"
 
 namespace av {
@@ -112,15 +110,14 @@ void AudioDecoder::SetStream(AVStream* stream) {
     // }
 
 
+    // 获取解码器参数
+    AVCodecParameters* codec_params = stream->codecpar;
     // 定义对应的解码器
-    AVCodec* codec = avcodec_find_decoder(m_codecContext->codec_id);
+    const AVCodec* codec = avcodec_find_decoder(codec_params->codec_id);
     if (!codec) {
         std::cerr << "Codec not found." << std::endl;
         return;
     }
-
-    // 获取解码器参数
-    AVCodecParameters* codec_params = stream->codecpar;
     // 分配解码器 ctx
     m_codecContext = avcodec_alloc_context3(codec);
     // 设置解码器参数
@@ -266,6 +263,7 @@ void AudioDecoder::Decode(std::shared_ptr<IAVPacket> packet) {
     }
     // m_packetQueue.push_back(packet);
     m_packetQueue.emplace_back(packet);
+    m_notifier.Notify();
 }
 
 void AudioDecoder::ReleaseAudioPipelineResource() {

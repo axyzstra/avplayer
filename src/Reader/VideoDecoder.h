@@ -1,3 +1,5 @@
+// 忘了加上导致头文件重复包含
+#pragma once
 #include "Interface/IVideoDecoder.h"
 #include "Core/SyncNotifier.h"
 
@@ -12,7 +14,6 @@ extern "C" {
 #include <iostream>
 
 namespace av {
-
 class VideoDecoder : public IVideoDecoder {
 public:
     VideoDecoder();

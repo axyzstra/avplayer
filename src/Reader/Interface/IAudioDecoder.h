@@ -3,6 +3,7 @@
 #include "Define/IAVPacket.h"
 #include "Define/IAudioSamples.h"
 
+struct AVStream;
 namespace av {
 struct IAudioDecoder {
 

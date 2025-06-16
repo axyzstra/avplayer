@@ -7,11 +7,13 @@ extern "C" {
 #include <libavformat/avformat.h>
 #include <libavutil/opt.h>
 #include <libswresample/swresample.h>
+#include <libavutil/channel_layout.h>
 }
 #include <mutex>
 #include <list>
 #include <memory>
 #include <iostream>
+#include <thread>
 
 namespace av {
 

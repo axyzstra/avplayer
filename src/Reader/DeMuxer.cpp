@@ -28,6 +28,7 @@ DeMuxer::DeMuxer() {
     m_audioStream.pipelineReleaseCallback = std::make_shared<std::function<void()>>([&]() {
         ReleaseAudioPipelineResource();
     });
+    m_thread = std::thread(&DeMuxer::ThreadLoop, this);
 }
 
 DeMuxer::~DeMuxer() {
@@ -98,6 +99,7 @@ bool DeMuxer::ReadAndSendPacket() {
     } else {
         return false;
     }
+    return true;
 }
 
 float DeMuxer::GetDuration() {

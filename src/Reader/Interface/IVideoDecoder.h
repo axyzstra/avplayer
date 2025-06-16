@@ -2,6 +2,7 @@
 #include "Define/IAVPacket.h"
 #include "Define/IVideoFrame.h"
 
+struct AVStream;
 namespace av {
 struct IVideoDecoder {
     
