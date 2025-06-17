@@ -16,8 +16,10 @@ void AVSynchronizer::SetListener(Listener* listener) {
 
 void AVSynchronizer::Start() {
     m_abort = false;
-    m_audioStreamInfo.Reset();
-    m_videoStreamInfo.Reset();
+    // m_audioStreamInfo.Reset();
+    // m_videoStreamInfo.Reset();
+    m_audioStreamInfo = StreamInfo{};
+    m_videoStreamInfo = StreamInfo{};
     m_syncThread = std::thread(&AVSynchronizer::ThreadLoop, this);
 }
 

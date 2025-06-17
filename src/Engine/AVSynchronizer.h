@@ -41,10 +41,10 @@ private:
     struct StreamInfo {
         float currentTimeStamp{0.0f};       // 当前处理到的位置(时间)
         bool isFinished{false};
-        void Reset() {
-            currentTimeStamp = 0.0f;
-            isFinished = false;
-        }
+        // void Reset() {
+        //     currentTimeStamp = 0.0f;
+        //     isFinished = false;
+        // }
     };
     StreamInfo m_audioStreamInfo;
     StreamInfo m_videoStreamInfo;

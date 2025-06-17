@@ -5,7 +5,7 @@ project(AVPlay)
 list(APPEND CMAKE_PREFIX_PATH "${CMAKE_BINARY_DIR}/build/generators")
 
 add_executable(app
-    src/Test/decode.cpp
+    Test/decode.cpp
     src/Reader/DeMuxer.cpp
     src/Reader/AudioDecoder.cpp
     src/Reader/VideoDecoder.cpp
