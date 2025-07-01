@@ -3,6 +3,7 @@
 #include "Define/IAudioSamples.h"
 #include "Define/IVideoFrame.h"
 #include "Core/SyncNotifier.h"
+#include "Define/BaseDef.h"
 
 #include <mutex>
 #include <list>

@@ -126,11 +126,11 @@ void DeMuxer::ProcessSeek() {
     {
         std::lock_guard<std::recursive_mutex> listenerLock(m_listenerMutex);
         auto audioPacket = std::make_shared<IAVPacket>(nullptr);
-        audioPacket->flags |= AVFrameFlag::kFlush;
+        audioPacket->flags |= static_cast<int>(AVFrameFlag::kFlush);
         m_listener->OnNotifyAudioPacket(audioPacket);
 
         auto videoPacket = std::make_shared<IAVPacket>(nullptr);
-        videoPacket->flags |= AVFrameFlag::kFlush;
+        videoPacket->flags |= static_cast<int>(AVFrameFlag::kFlush);
         m_listener->OnNotifyVideoPacket(videoPacket);
     }
     m_seekProgress = -1.0f;

@@ -60,14 +60,14 @@ void AVSynchronizer::Synchronize() {
     while (!m_auidoQueue.empty()) {
         auto audioSamples = m_auidoQueue.front();
         // 当音频帧处理完毕，表示处理结束
-        if (audioSamples->flags & AVFrameFlag::kEOS) {
+        if (audioSamples->flags & static_cast<int>(AVFrameFlag::kEOS)) {
             m_audioStreamInfo.isFinished = true;
             m_auidoQueue.pop_front();
             std::lock_guard<std::mutex> listenerLock(m_listenerMutex);
             if (m_listener) {
                 m_listener->OnAVSynchronizerNotifyAudioFinished();
             } 
-        } else if (audioSamples->flags & AVFrameFlag::kFlush) {
+        } else if (audioSamples->flags & static_cast<int>(AVFrameFlag::kFlush)) {
             m_auidoQueue.clear();
             m_videoQueue.clear();
         } else {
@@ -83,7 +83,7 @@ void AVSynchronizer::Synchronize() {
 
     while (!m_videoQueue.empty()) {
         auto videoFrame = m_videoQueue.front();
-        if (videoFrame->flags & AVFrameFlag::kEOS) {
+        if (videoFrame->flags & static_cast<int>(AVFrameFlag::kEOS)) {
             m_videoStreamInfo.isFinished = true;
             m_videoQueue.pop_front();
             std::lock_guard<std::mutex> listenerLock(m_listenerMutex);
@@ -91,7 +91,7 @@ void AVSynchronizer::Synchronize() {
                 m_listener->OnAVSynchronizerNotifyVideoFinished();
             }
             continue;
-        } else if (videoFrame->flags & AVFrameFlag::kFlush) {
+        } else if (videoFrame->flags & static_cast<int>(AVFrameFlag::kFlush)) {
             m_auidoQueue.clear();
             m_videoQueue.clear();
             continue;

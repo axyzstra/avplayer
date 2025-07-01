@@ -58,12 +58,12 @@ void AudioDecoder::CheckFlushPacket() {
         return;
     }
     auto packet = m_packetQueue.front();
-    if (packet->flags & AVFrameFlag::kFlush) {
+    if (packet->flags & static_cast<int>(AVFrameFlag::kFlush)) {
         m_packetQueue.pop_front();
         avcodec_flush_buffers(m_codecContext);
 
         auto audioSamples = std::make_shared<IAudioSamples>();
-        audioSamples->flags |= AVFrameFlag::kFlush;
+        audioSamples->flags |= static_cast<int>(AVFrameFlag::kFlush);
         std::lock_guard<std::recursive_mutex> lock(m_listenerMutex);
         if (m_listener) m_listener->OnNotifyAudioSamples(audioSamples);
     }
@@ -258,7 +258,7 @@ void AudioDecoder::Decode(std::shared_ptr<IAVPacket> packet) {
         return;
     }
     std::lock_guard<std::mutex> lock(m_packetQueueMutex);
-    if (packet->flags & AVFrameFlag::kFlush) {
+    if (packet->flags & static_cast<int>(AVFrameFlag::kFlush)) {
         m_packetQueue.clear();
     }
     // m_packetQueue.push_back(packet);

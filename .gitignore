@@ -1,3 +1,5 @@
 .vscode/**
 .vs/**
 cmake-build-debug/**
+build/**
+out/**
