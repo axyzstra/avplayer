@@ -14,6 +14,13 @@ include_directories(./include)
 
 
 add_executable(app
+    Test/testFilter.cpp
+    src/VideoFilter/StickerFilter.cpp
+    src/VideoFilter/InvertFilter.cpp
+    src/VideoFilter/GrayFilter.cpp
+    src/VideoFilter/FlipVerticalFilter.cpp
+    src/VideoFilter/VideoFilter.cpp
+    src/Engine/GLContext.cpp
     src/Utils/GLUtils.cpp
     src/Engine/VideoPipeline.cpp
     src/Reader/DeMuxer.cpp

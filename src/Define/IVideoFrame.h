@@ -16,7 +16,7 @@ struct IVideoFrame {
     int32_t timebaseDen{1};
     std::shared_ptr<uint8_t> data;      // RGBA 数据
 
-    // unsigned int textureId{0};          // OpenGL 纹理 ID
+    unsigned int textureId{0};          // OpenGL 纹理 ID
 
     std::weak_ptr<std::function<void()>> releaseCallback;
 
