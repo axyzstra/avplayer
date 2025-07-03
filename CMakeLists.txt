@@ -14,6 +14,7 @@ include_directories(./include)
 
 
 add_executable(app
+    src/Engine/AudioPipeline.cpp
     src/Engine/AudioSpeaker.cpp
     src/Engine/VideoDisplayView.cpp
     src/VideoFilter/StickerFilter.cpp
