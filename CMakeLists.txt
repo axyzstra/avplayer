@@ -5,7 +5,7 @@ list(APPEND CMAKE_PREFIX_PATH "${CMAKE_BINARY_DIR}/build/generators")
 
 set(CMAKE_PREFIX_PATH "G:/devtools/QT/6.8.3/msvc2022_64/lib/cmake/Qt6" ${CMAKE_PREFIX_PATH})
 
-find_package(Qt6 COMPONENTS Widgets OpenGL OpenGLWidgets REQUIRED)
+find_package(Qt6 COMPONENTS Widgets OpenGL OpenGLWidgets Multimedia REQUIRED)
 find_package(ffmpeg REQUIRED)
 find_package(glm REQUIRED)
 
@@ -14,6 +14,7 @@ include_directories(./include)
 
 
 add_executable(app
+    src/Engine/AudioSpeaker.cpp
     src/Engine/VideoDisplayView.cpp
     src/VideoFilter/StickerFilter.cpp
     src/VideoFilter/InvertFilter.cpp
@@ -37,6 +38,7 @@ target_link_libraries(app PRIVATE
     Qt6::Widgets
     Qt6::OpenGL
     Qt6::OpenGLWidgets
+    Qt6::Multimedia
 )
 
 set(CMAKE_AUTOMOC ON)
