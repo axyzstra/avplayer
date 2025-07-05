@@ -2,8 +2,14 @@
 
 namespace av {
 
+IVideoPipeline* IVideoPipeline::Create(GLContext& glContext) {
+    return new VideoPipeline(glContext);
+}
+
 VideoPipeline::VideoPipeline(GLContext& glContext) :
-    m_sharedGLContext(glContext), m_thread(std::make_shared<std::thread>(&VideoPipeline::ThreadLoop, this)) {}
+    m_sharedGLContext(glContext), m_thread(std::make_shared<std::thread>(&VideoPipeline::ThreadLoop, this)) {
+    initializeOpenGLFunctions();
+}
 
 VideoPipeline::~VideoPipeline() { Stop(); }
 
@@ -147,5 +153,15 @@ void VideoPipeline::ThreadLoop() {
     m_sharedGLContext.Destroy();
 }
 
+void VideoPipeline::NotifyVideoFrame(std::shared_ptr<IVideoFrame> videoFrame) {
+    std::lock_guard<std::mutex> lock(m_queueMutex);
+    m_frameQueue.push_back(videoFrame);
+    m_queueCondVar.notify_one();
+}
+
+void VideoPipeline::NotifyVideoFinished() {
+    std::lock_guard<std::recursive_mutex> lock(m_listenerMutex);
+    if (m_listener) m_listener->OnVideoPipelineNotifyFinished();
+}
 
 }

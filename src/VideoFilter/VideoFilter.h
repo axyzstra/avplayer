@@ -3,16 +3,15 @@
 #include "Define/IVideoFrame.h"
 #include "IVideoFilter.h"
 #include "Utils/GLUtils.h"
-#include "FlipVerticalFilter.h"
-#include "GrayFilter.h"
-#include "InvertFilter.h"
-#include "StickerFilter.h"
 #include <string>
 #include <unordered_map>
 
+#include <QOpenGLFunctions>
+#include <QOpenGLFunctions_3_3_Core>
+
 namespace av {
 
-class VideoFilter : public IVideoFilter {
+class VideoFilter : public IVideoFilter, protected QOpenGLFunctions_3_3_Core {
 public:
     VideoFilter() = default;
     ~VideoFilter();

@@ -1,4 +1,4 @@
-#pragma ocne
+#pragma once
 #include "Interface/IAudioPipeline.h"
 #include <mutex>
 

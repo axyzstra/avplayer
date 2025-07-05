@@ -2,7 +2,7 @@
 
 namespace av {
 
-AVSynchronizer::AVSynchronizer() {
+AVSynchronizer::AVSynchronizer(GLContext& glContext) : m_glContext(glContext) {
     Start();
 }
 
@@ -41,7 +41,7 @@ void AVSynchronizer::ThreadLoop() {
             break;
         }
         if (m_reset) {
-            m_auidoQueue.clear();
+            m_audioQueue.clear();
             m_videoQueue.clear();
             m_reset = false;
         }
@@ -53,27 +53,65 @@ void AVSynchronizer::ThreadLoop() {
     }
 }
 
+void AVSynchronizer::NotifyAudioSamples(std::shared_ptr<IAudioSamples> audioSamples) {
+    if (!audioSamples) return;
+
+    {
+        std::lock_guard<std::mutex> lock(m_mutex);
+        if (audioSamples->flags & static_cast<int>(AVFrameFlag::kFlush)) {
+            m_audioQueue.clear();
+        }
+        m_audioQueue.push_back(audioSamples);
+    }
+    m_notifier.Notify();
+}
+
+void AVSynchronizer::NotifyVideoFrame(std::shared_ptr<IVideoFrame> videoFrame) {
+    if (!videoFrame) return;
+
+    {
+        std::lock_guard<std::mutex> lock(m_mutex);
+        if (videoFrame->flags & static_cast<int>(AVFrameFlag::kFlush)) {
+            m_videoQueue.clear();
+        }
+        m_videoQueue.push_back(videoFrame);
+    }
+    m_notifier.Notify();
+}
+
+void AVSynchronizer::NotifyAudioFinished() {
+    auto audioSamples = std::make_shared<IAudioSamples>();
+    audioSamples->flags |= static_cast<int>(AVFrameFlag::kEOS);
+    NotifyAudioSamples(audioSamples);
+}
+
+void AVSynchronizer::NotifyVideoFinished() {
+    auto videoFrame = std::make_shared<IVideoFrame>();
+    videoFrame->flags |= static_cast<int>(AVFrameFlag::kEOS);
+    NotifyVideoFrame(videoFrame);
+}
+
 
 void AVSynchronizer::Synchronize() {
     std::unique_lock<std::mutex> lock(m_mutex);
 
-    while (!m_auidoQueue.empty()) {
-        auto audioSamples = m_auidoQueue.front();
+    while (!m_audioQueue.empty()) {
+        auto audioSamples = m_audioQueue.front();
         // 当音频帧处理完毕，表示处理结束
         if (audioSamples->flags & static_cast<int>(AVFrameFlag::kEOS)) {
             m_audioStreamInfo.isFinished = true;
-            m_auidoQueue.pop_front();
+            m_audioQueue.pop_front();
             std::lock_guard<std::mutex> listenerLock(m_listenerMutex);
             if (m_listener) {
                 m_listener->OnAVSynchronizerNotifyAudioFinished();
             } 
         } else if (audioSamples->flags & static_cast<int>(AVFrameFlag::kFlush)) {
-            m_auidoQueue.clear();
+            m_audioQueue.clear();
             m_videoQueue.clear();
         } else {
             // 处理音频，即直接发送给播放器进行播放
             m_audioStreamInfo.currentTimeStamp = audioSamples->GetTimeStamp();
-            m_auidoQueue.pop_front();
+            m_audioQueue.pop_front();
             std::lock_guard<std::mutex> listenerLock(m_listenerMutex);
             if (m_listener) {
                 m_listener->OnAVSynchronizerNotifyAudioSamples(audioSamples);
@@ -92,7 +130,7 @@ void AVSynchronizer::Synchronize() {
             }
             continue;
         } else if (videoFrame->flags & static_cast<int>(AVFrameFlag::kFlush)) {
-            m_auidoQueue.clear();
+            m_audioQueue.clear();
             m_videoQueue.clear();
             continue;
         }

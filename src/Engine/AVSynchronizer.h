@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Utils/GLUtils.h"
 #include "Define/IAudioSamples.h"
 #include "Define/IVideoFrame.h"
 #include "Core/SyncNotifier.h"
@@ -24,13 +25,20 @@ public:
     };
 
     void SetListener(Listener* listener);
-    AVSynchronizer();
+    // AVSynchronizer();
+    explicit AVSynchronizer(GLContext& glContext);
     ~AVSynchronizer();
 
     // 并发控制
     void Start();
     void Stop();
     void Reset();
+
+    void NotifyAudioSamples(std::shared_ptr<IAudioSamples> audioSamples);
+    void NotifyVideoFrame(std::shared_ptr<IVideoFrame> videoFrame);
+
+    void NotifyAudioFinished();
+    void NotifyVideoFinished();
 
 private:
     // 以音频为基准进行同步
@@ -42,18 +50,21 @@ private:
     struct StreamInfo {
         float currentTimeStamp{0.0f};       // 当前处理到的位置(时间)
         bool isFinished{false};
-        // void Reset() {
-        //     currentTimeStamp = 0.0f;
-        //     isFinished = false;
-        // }
+        void Reset() {
+            currentTimeStamp = 0.0f;
+            isFinished = false;
+        }
     };
     StreamInfo m_audioStreamInfo;
     StreamInfo m_videoStreamInfo;
 
     const double syncThreshold = 0.05;
 
+    // OpenGL context
+    GLContext m_glContext;
+
     std::mutex m_mutex;
-    std::list<std::shared_ptr<IAudioSamples>> m_auidoQueue;
+    std::list<std::shared_ptr<IAudioSamples>> m_audioQueue;
     std::list<std::shared_ptr<IVideoFrame>> m_videoQueue;
 
     std::mutex m_listenerMutex;

@@ -1,5 +1,12 @@
 #include "VideoFilter.h"
 
+#include "FlipVerticalFilter.h"
+#include "GrayFilter.h"
+#include "InvertFilter.h"
+#include "StickerFilter.h"
+
+
+
 namespace av {
 
 VideoFilter::~VideoFilter() {
@@ -21,6 +28,7 @@ void VideoFilter::SetString(const std::string& name, const std::string& value) {
 std::string VideoFilter::GetString(const std::string& name) { return m_stringValues[name]; }
 
 void VideoFilter::Initialize() {
+    initializeOpenGLFunctions();
     if (m_initialized) {
         return;
     }

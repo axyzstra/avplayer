@@ -5,9 +5,12 @@
 #include "Utils/GLUtils.h"
 #include <iostream>
 
+#include <QOpenGLFunctions>
+#include <QOpenGLFunctions_3_3_Core>
+
 namespace av {
 
-class VideoDisplayView : public IVideoDisplayView { 
+class VideoDisplayView : public IVideoDisplayView, protected QOpenGLFunctions_3_3_Core { 
 public:
     VideoDisplayView() = default;
     ~VideoDisplayView();

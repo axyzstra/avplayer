@@ -5,23 +5,28 @@ list(APPEND CMAKE_PREFIX_PATH "${CMAKE_BINARY_DIR}/build/generators")
 
 set(CMAKE_PREFIX_PATH "G:/devtools/QT/6.8.3/msvc2022_64/lib/cmake/Qt6" ${CMAKE_PREFIX_PATH})
 
-find_package(Qt6 COMPONENTS Widgets OpenGL OpenGLWidgets Multimedia REQUIRED)
+find_package(Qt6 COMPONENTS Widgets Core OpenGL OpenGLWidgets Multimedia REQUIRED)
+find_package(OpenGL REQUIRED)
 find_package(ffmpeg REQUIRED)
 find_package(glm REQUIRED)
+find_package(stb REQUIRED)
 
 include_directories(./src)
 include_directories(./include)
 
 
 add_executable(app
+    Test/play.cpp
+    src/Core/TaskPool.cpp
+    src/Engine/Player.cpp
     src/Engine/AudioPipeline.cpp
     src/Engine/AudioSpeaker.cpp
     src/Engine/VideoDisplayView.cpp
+    src/VideoFilter/VideoFilter.cpp
     src/VideoFilter/StickerFilter.cpp
     src/VideoFilter/InvertFilter.cpp
     src/VideoFilter/GrayFilter.cpp
     src/VideoFilter/FlipVerticalFilter.cpp
-    src/VideoFilter/VideoFilter.cpp
     src/Engine/GLContext.cpp
     src/Utils/GLUtils.cpp
     src/Engine/VideoPipeline.cpp
@@ -36,10 +41,13 @@ add_executable(app
 target_link_libraries(app PRIVATE 
     ffmpeg::ffmpeg 
     glm::glm
+    stb::stb
+    Qt6::Core
     Qt6::Widgets
     Qt6::OpenGL
     Qt6::OpenGLWidgets
     Qt6::Multimedia
+    opengl32
 )
 
 set(CMAKE_AUTOMOC ON)

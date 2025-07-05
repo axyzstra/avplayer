@@ -24,6 +24,8 @@ struct IVideoPipeline {
     virtual void NotifyVideoFinished() = 0;
     virtual void Stop() = 0;
 
+    static IVideoPipeline* Create(GLContext& glContext);
+
     virtual ~IVideoPipeline() = default;
 };
 

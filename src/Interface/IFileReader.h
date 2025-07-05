@@ -10,6 +10,8 @@ struct IFileReader {
     struct Listener {
         virtual void OnFileReaderNotifyAudioSamples(std::shared_ptr<IAudioSamples>) = 0;
         virtual void OnFileReaderNotifyVideoFrame(std::shared_ptr<IVideoFrame>) = 0;
+        virtual void OnFileReaderNotifyAudioFinished() = 0;
+        virtual void OnFileReaderNotifyVideoFinished() = 0;
         virtual ~Listener() = default;
     };
 

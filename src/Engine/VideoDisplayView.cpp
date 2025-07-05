@@ -57,6 +57,7 @@ void VideoDisplayView::SetTaskPool(std::shared_ptr<TaskPool> taskPool) {
 }
 
 void VideoDisplayView::InitializeGL() {
+    initializeOpenGLFunctions();
     m_shaderProgram = GLUtils::CompileAndLinkProgram(vertexShaderSource, fragmentShaderSource);
 
     // 坐标和纹理
