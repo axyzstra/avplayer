@@ -4,8 +4,8 @@
 #include "GrayFilter.h"
 #include "InvertFilter.h"
 #include "StickerFilter.h"
-
-
+#include <QOpenGLContext>
+#include <QDebug>
 
 namespace av {
 
@@ -27,23 +27,72 @@ void VideoFilter::SetString(const std::string& name, const std::string& value) {
 
 std::string VideoFilter::GetString(const std::string& name) { return m_stringValues[name]; }
 
-void VideoFilter::Initialize() {
-    initializeOpenGLFunctions();
-    if (m_initialized) {
-        return;
-    }
-    m_initialized = true;
-    // 编译链接片段和顶点着色器
-    m_shaderProgram = GLUtils::CompileAndLinkProgram(m_description.vertexShaderSource, m_description.fragmentShaderSource);
+bool VideoFilter::Render(std::shared_ptr<IVideoFrame> frame, unsigned int outputTexture) {
+    if (!PreRender(frame, outputTexture)) return false;
+    if (!MainRender(frame, outputTexture)) return false;
+    return PostRender();
+}
 
-    // 顶点和纹理坐标
+bool VideoFilter::PreRender(std::shared_ptr<IVideoFrame> frame, unsigned int outputTexture) {
+    Initialize();
+    if (!m_initialized) return false;
+
+    // Bind FBO and attach output texture
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, outputTexture, 0);
+
+    // Check if FBO is complete
+    if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+        std::cerr << "ERROR::FRAMEBUFFER::Framebuffer is not complete!" << std::endl;
+        return false;
+    }
+
+    glViewport(0, 0, frame->width, frame->height);
+    glClearColor(0.0, 0.0, 0.0, 0.0);
+    glClear(GL_COLOR_BUFFER_BIT);
+    glUseProgram(m_shaderProgram);
+    return true;
+}
+
+bool VideoFilter::MainRender(std::shared_ptr<IVideoFrame> frame, unsigned int outputTexture) {
+    // Bind input texture
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, frame->textureId);
+    if (m_uTextureLocation == -1) {
+        std::cerr << "ERROR: uniform 'u_texture' not found or inactive!" << std::endl;
+    } else {
+        glUniform1i(m_uTextureLocation, 0);
+    }
+
+    // Render quad
+    glBindVertexArray(m_vao);
+    glDrawArrays(GL_TRIANGLE_FAN, 0, 4);
+    glBindVertexArray(0);
+    return true;
+}
+
+bool VideoFilter::PostRender() {
+    glBindTexture(GL_TEXTURE_2D, 0);
+    return true;
+}
+
+void VideoFilter::Initialize() {
+    if (m_initialized) return;
+    m_initialized = true;
+
+    // Compile and link shaders
+    m_shaderProgram =
+        GLUtils::CompileAndLinkProgram(m_description.vertexShaderSource, m_description.fragmentShaderSource);
+
+    // Define a quad for rendering
     float vertices[] = {
-        -1.0f, 1.0f,  0.0f, 1.0f,
-        -1.0f, -1.0f, 0.0f, 0.0f,
-        1.0f,  -1.0f, 1.0f, 0.0f,
-        1.0f,  1.0f,  1.0f, 1.0f
+        // Positions    // Texture Coords
+        -1.0f, 1.0f,  0.0f, 1.0f,  // Top-left
+        -1.0f, -1.0f, 0.0f, 0.0f,  // Bottom-left
+        1.0f,  -1.0f, 1.0f, 0.0f,  // Bottom-right
+        1.0f,  1.0f,  1.0f, 1.0f   // Top-right
     };
 
+    // Setup VAO and VBO
     glGenVertexArrays(1, &m_vao);
     glGenBuffers(1, &m_vbo);
 
@@ -52,15 +101,23 @@ void VideoFilter::Initialize() {
     glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
     glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
 
+    // Position attribute
     glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)0);
     glEnableVertexAttribArray(0);
 
+    // Texture coord attribute
     glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), reinterpret_cast<void*>(2 * sizeof(float)));
     glEnableVertexAttribArray(1);
 
     glBindVertexArray(0);
 
     m_uTextureLocation = glGetUniformLocation(m_shaderProgram, "u_texture");
+}
+
+int VideoFilter::GetUniformLocation(const std::string& name) {
+    auto [it, inserted] = m_uniformLocationCache.try_emplace(name, glGetUniformLocation(m_shaderProgram, name.c_str()));
+    if (it->second == -1) std::cerr << "Warning: uniform '" << name << "' doesn't exist!" << std::endl;
+    return it->second;
 }
 
 VideoFilter* VideoFilter::Create(VideoFilterType type) {
@@ -80,62 +137,4 @@ VideoFilter* VideoFilter::Create(VideoFilterType type) {
     return nullptr;
 }
 
-bool VideoFilter::PreRender(std::shared_ptr<IVideoFrame> frame, unsigned int outputTexture) {
-    Initialize();
-    if (!m_initialized) return false;
-
-    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, outputTexture, 0);
-
-    if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
-        std::cerr << "ERROR::FRAMEBUFFER::Framebuffer is not complete!" << std::endl;
-        return false;
-    }
-
-    glViewport(0, 0, frame->width, frame->height);
-    glClearColor(0.0, 0.0, 0.0, 0.0);
-    glClear(GL_COLOR_BUFFER_BIT);
-    glUseProgram(m_shaderProgram);
-    return true;
-}
-
-bool VideoFilter::Render(std::shared_ptr<IVideoFrame> frame, unsigned int outputTexture) {
-    if (!PreRender(frame, outputTexture)) return false;
-    if (!MainRender(frame, outputTexture)) return false;
-    return PostRender();
-}
-
-bool VideoFilter::MainRender(std::shared_ptr<IVideoFrame> frame, unsigned int outputTexture) {
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, frame->textureId);
-    if (m_uTextureLocation == -1) {
-        std::cerr << "ERROR: uniform 'u_texture' not found or inactive!" << std::endl;
-    } else {
-        glUniform1i(m_uTextureLocation, 0);
-    }
-
-    glBindVertexArray(m_vao);
-    glDrawArrays(GL_TRIANGLE_FAN, 0, 4);
-    glBindVertexArray(0);
-    return true;
-}
-
-bool VideoFilter::PostRender() {
-    glBindTexture(GL_TEXTURE_2D, 0);
-    return true;
-}
-
-int VideoFilter::GetUniformLocation(const std::string& name) {
-    // 使用try_emplace尝试插入
-    auto [it, inserted] = m_uniformLocationCache.try_emplace(
-        name,                                                   // key: 变量名
-        glGetUniformLocation(m_shaderProgram, name.c_str())     // value: 位置
-    );
-    // inserted为 true 表示是新插入的，false 表示已存在
-    // it->second 就是uniform的位置值
-    if (it->second == -1) {
-        std::cerr << "Warning: uniform '" << name << "' doesn't exist!" << std::endl;
-    }
-    return it->second;
-}
-
-}
+}  // namespace av

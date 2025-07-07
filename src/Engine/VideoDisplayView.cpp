@@ -1,7 +1,11 @@
 #include "VideoDisplayView.h"
+#include <QOpenGLExtraFunctions>
+#include <QOpenGLContext>
+#include <QDebug>
 
 namespace av {
 
+// Vertex Shader Source
 static const char* vertexShaderSource = R"(
     #version 330 core
     layout(location = 0) in vec3 aPos;
@@ -16,6 +20,7 @@ static const char* vertexShaderSource = R"(
     }
 )";
 
+// Fragment Shader Source
 static const char* fragmentShaderSource = R"(
     #version 330 core
     out vec4 FragColor;
@@ -30,43 +35,18 @@ static const char* fragmentShaderSource = R"(
     }
 )";
 
+IVideoDisplayView* IVideoDisplayView::Create() { return new VideoDisplayView(); }
 
-IVideoDisplayView* IVideoDisplayView::Create() { 
-    return new VideoDisplayView(); 
-}
+VideoDisplayView::~VideoDisplayView() { Clear(); }
 
-VideoDisplayView::~VideoDisplayView() { 
-    Clear(); 
-}
-
-void VideoDisplayView::Clear() {
-    SyncNotifier notifier;
-    if (m_taskPool) {
-        m_taskPool->SubmitTask([&]() {
-            if (m_shaderProgram > 0) glDeleteProgram(m_shaderProgram);
-            std::lock_guard<std::mutex> lock(m_videoFrameMutex);
-            m_videoFrame = nullptr;
-            notifier.Notify();
-        });
-    }
-    notifier.Wait();
-}
-
-void VideoDisplayView::SetTaskPool(std::shared_ptr<TaskPool> taskPool) {
-    m_taskPool = taskPool; 
-}
+void VideoDisplayView::SetTaskPool(std::shared_ptr<TaskPool> taskPool) { m_taskPool = taskPool; }
 
 void VideoDisplayView::InitializeGL() {
-    initializeOpenGLFunctions();
     m_shaderProgram = GLUtils::CompileAndLinkProgram(vertexShaderSource, fragmentShaderSource);
 
-    // 坐标和纹理
-    float vertices[] = {
-        1.0f,  1.0f,  0.0f, 1.0f, 1.0f,
-        1.0f,-1.0f, 0.0f, 1.0f, 0.0f,
-        -1.0f, -1.0f, 0.0f, 0.0f, 0.0f,
-        -1.0f, 1.0f,  0.0f, 0.0f, 1.0f
-    };
+    float vertices[] = {// positions         // texture coords
+                        1.0f,  1.0f,  0.0f, 1.0f, 1.0f, 1.0f,  -1.0f, 0.0f, 1.0f, 0.0f,
+                        -1.0f, -1.0f, 0.0f, 0.0f, 0.0f, -1.0f, 1.0f,  0.0f, 0.0f, 1.0f};
 
     unsigned int indices[] = {0, 1, 3, 1, 2, 3};
 
@@ -91,34 +71,29 @@ void VideoDisplayView::InitializeGL() {
     glBindVertexArray(0);
 }
 
-void VideoDisplayView::SetDisplaySize(int width, int height) { 
-    glViewport(0, 0, width, height);
-}
+void VideoDisplayView::SetDisplaySize(int width, int height) { glViewport(0, 0, width, height); }
 
 void VideoDisplayView::Render(std::shared_ptr<IVideoFrame> videoFrame, EContentMode mode) {
-    if (!videoFrame) {
-        return;
-    }
+    if (!videoFrame) return;
+
     std::lock_guard<std::mutex> lock(m_videoFrameMutex);
     m_videoFrame = videoFrame;
     m_mode = mode;
 }
 
 void VideoDisplayView::Render(int width, int height, float red, float green, float blue) {
-    // 清屏
+    std::lock_guard<std::mutex> lock(m_videoFrameMutex);
+
     glClearColor(red, green, blue, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT);
 
-    if (!m_videoFrame) {
-        return;
-    }
+    if (!m_videoFrame) return;
 
-    // 未设置纹理时进行设置
     if (!m_videoFrame->textureId) {
         glGenTextures(1, &m_videoFrame->textureId);
         glBindTexture(GL_TEXTURE_2D, m_videoFrame->textureId);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, m_videoFrame->width, m_videoFrame->height, 0, GL_RGBA, GL_UNSIGNED_BYTE, m_videoFrame->data.get());
-        // 设置环绕模式
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, m_videoFrame->width, m_videoFrame->height, 0, GL_RGBA, GL_UNSIGNED_BYTE,
+                     m_videoFrame->data.get());
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     } else {
@@ -132,10 +107,6 @@ void VideoDisplayView::Render(int width, int height, float red, float green, flo
 
     glBindVertexArray(m_VAO);
 
-    // 根据模式(缩放模式)显示帧
-    // ScaleToFill: 强制填满
-    // ScaleAspectFit: 保持比例，使用黑边填充
-    // ScaleAspectFill: 保持比例，填满屏幕(裁剪)
     switch (m_mode) {
         case EContentMode::kScaleToFill:
             glViewport(0, 0, width, height);
@@ -166,7 +137,23 @@ void VideoDisplayView::Render(int width, int height, float red, float green, flo
         }
     }
 
+    glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
+    glBindVertexArray(0);
+
+    glBindTexture(GL_TEXTURE_2D, 0);
 }
 
-
+void VideoDisplayView::Clear() {
+    SyncNotifier notifier;
+    if (m_taskPool) {
+        m_taskPool->SubmitTask([&]() {
+            if (m_shaderProgram > 0) glDeleteProgram(m_shaderProgram);
+            std::lock_guard<std::mutex> lock(m_videoFrameMutex);
+            m_videoFrame = nullptr;
+            notifier.Notify();
+        });
+    }
+    notifier.Wait();
 }
+
+}  // namespace av

@@ -11,12 +11,26 @@ find_package(ffmpeg REQUIRED)
 find_package(glm REQUIRED)
 find_package(stb REQUIRED)
 
+set(CMAKE_AUTOMOC ON)
+set(CMAKE_AUTOUIC ON)
+set(CMAKE_AUTORCC ON)
+
 include_directories(./src)
 include_directories(./include)
+include_directories(./qt)
 
+set(HEADERS
+    qt/MainWindow.h
+    qt/view/OpenGLView.h
+    qt/UI/PlayerWidget.h
+)
 
 add_executable(app
-    Test/play.cpp
+    ${HEADERS}
+    qt/Main.cpp
+    qt/MainWindow.cpp
+    qt/view/OpenGLView.cpp
+    qt/UI/PlayerWidget.cpp
     src/Core/TaskPool.cpp
     src/Engine/Player.cpp
     src/Engine/AudioPipeline.cpp
@@ -50,6 +64,3 @@ target_link_libraries(app PRIVATE
     opengl32
 )
 
-set(CMAKE_AUTOMOC ON)
-set(CMAKE_AUTOUIC ON)
-set(CMAKE_AUTORCC ON)

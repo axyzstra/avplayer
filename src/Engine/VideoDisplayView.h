@@ -10,7 +10,11 @@
 
 namespace av {
 
-class VideoDisplayView : public IVideoDisplayView, protected QOpenGLFunctions_3_3_Core { 
+class VideoDisplayView : public QObject, public IVideoDisplayView {
+    Q_OBJECT
+public:
+    signals:
+        void updateRequested();
 public:
     VideoDisplayView() = default;
     ~VideoDisplayView();

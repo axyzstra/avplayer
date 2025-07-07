@@ -1,26 +1,15 @@
 #include "VideoPipeline.h"
+#include <QOpenGLContext>
+#include <QDebug>
 
 namespace av {
 
-IVideoPipeline* IVideoPipeline::Create(GLContext& glContext) {
-    return new VideoPipeline(glContext);
-}
+IVideoPipeline* IVideoPipeline::Create(GLContext& glContext) { return new VideoPipeline(glContext); }
 
-VideoPipeline::VideoPipeline(GLContext& glContext) :
-    m_sharedGLContext(glContext), m_thread(std::make_shared<std::thread>(&VideoPipeline::ThreadLoop, this)) {
-    initializeOpenGLFunctions();
-}
+VideoPipeline::VideoPipeline(GLContext& glContext)
+    : m_sharedGLContext(glContext), m_thread(std::make_shared<std::thread>(&VideoPipeline::ThreadLoop, this)) {}
 
 VideoPipeline::~VideoPipeline() { Stop(); }
-
-void VideoPipeline::Stop() {
-    {
-        std::lock_guard<std::mutex> lock(m_queueMutex);
-        m_abort = true;
-        m_queueCondVar.notify_all();
-    }
-    if (m_thread->joinable()) m_thread->join();
-}
 
 void VideoPipeline::SetListener(Listener* listener) {
     std::lock_guard<std::recursive_mutex> lock(m_listenerMutex);
@@ -29,27 +18,45 @@ void VideoPipeline::SetListener(Listener* listener) {
 
 std::shared_ptr<IVideoFilter> VideoPipeline::AddVideoFilter(VideoFilterType type) {
     std::lock_guard<std::mutex> lock(m_videoFilterMutex);
+    // 如果已经存在相同类型的滤镜，则不再添加
     for (auto& filter : m_videoFilters) {
-        if (filter->GetType() == type) {
-            return filter;
-        }
+        if (filter->GetType() == type) return filter;
     }
+
     auto filter = std::shared_ptr<VideoFilter>(VideoFilter::Create(type));
-    if (filter) {
-        m_videoFilters.push_back(filter);
-    }
+    if (filter) m_videoFilters.push_back(filter);
     return filter;
 }
 
 void VideoPipeline::RemoveVideoFilter(VideoFilterType type) {
     std::lock_guard<std::mutex> lock(m_videoFilterMutex);
-    for (auto it = m_videoFilters.begin(); it != m_videoFilters.end(); it++) {
+    for (auto it = m_videoFilters.begin(); it != m_videoFilters.end(); ++it) {
         if ((*it)->GetType() == type) {
             m_removedVideoFilters.push_back(*it);
             it = m_videoFilters.erase(it);
             break;
         }
     }
+}
+
+void VideoPipeline::NotifyVideoFrame(std::shared_ptr<IVideoFrame> videoFrame) {
+    std::lock_guard<std::mutex> lock(m_queueMutex);
+    m_frameQueue.push_back(videoFrame);
+    m_queueCondVar.notify_one();
+}
+
+void VideoPipeline::NotifyVideoFinished() {
+    std::lock_guard<std::recursive_mutex> lock(m_listenerMutex);
+    if (m_listener) m_listener->OnVideoPipelineNotifyFinished();
+}
+
+void VideoPipeline::Stop() {
+    {
+        std::lock_guard<std::mutex> lock(m_queueMutex);
+        m_abort = true;
+        m_queueCondVar.notify_all();
+    }
+    if (m_thread->joinable()) m_thread->join();
 }
 
 void VideoPipeline::PrepareTempTexture(int width, int height) {
@@ -73,16 +80,18 @@ void VideoPipeline::PrepareVideoFrame(std::shared_ptr<IVideoFrame> frame) {
     glGenTextures(1, &frame->textureId);
     glBindTexture(GL_TEXTURE_2D, frame->textureId);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, frame->width, frame->height, 0, GL_RGBA, GL_UNSIGNED_BYTE,
-                frame->data.get());
+                 frame->data.get());
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    
+
+    // 垂直翻转画面
     if (!m_flipVerticalFilter) {
         m_flipVerticalFilter = std::shared_ptr<VideoFilter>(VideoFilter::Create(VideoFilterType::kFlipVertical));
     }
     if (m_flipVerticalFilter) {
         m_flipVerticalFilter->Render(frame, m_tempTexture.id);
     }
+
     std::swap(frame->textureId, m_tempTexture.id);
 }
 
@@ -91,9 +100,7 @@ void VideoPipeline::RenderVideoFilter(std::shared_ptr<IVideoFrame> frame) {
 
     std::lock_guard<std::mutex> lock(m_videoFilterMutex);
     m_removedVideoFilters.clear();
-    if (m_videoFilters.empty()) {
-        return;
-    }
+    if (m_videoFilters.empty()) return;
 
     auto inputTexture = frame->textureId;
     auto outputTexture = m_tempTexture.id;
@@ -101,13 +108,12 @@ void VideoPipeline::RenderVideoFilter(std::shared_ptr<IVideoFrame> frame) {
     auto filterRenderCount = 0;
     for (auto& filter : m_videoFilters) {
         if (filter->Render(frame, outputTexture)) {
-            filterRenderCount++;
+            ++filterRenderCount;
             std::swap(inputTexture, outputTexture);
         }
     }
-    if (filterRenderCount % 2 == 1) {
-        std::swap(frame->textureId, m_tempTexture.id);
-    }
+
+    if (filterRenderCount % 2 == 1) std::swap(frame->textureId, m_tempTexture.id);
 }
 
 void VideoPipeline::ThreadLoop() {
@@ -118,30 +124,26 @@ void VideoPipeline::ThreadLoop() {
     glGenFramebuffers(1, &fbo);
     glBindFramebuffer(GL_FRAMEBUFFER, fbo);
 
-    while (true) {
-        // 循环渲染 rgbframe
+    for (;;) {
         std::shared_ptr<IVideoFrame> frame;
         {
             std::unique_lock<std::mutex> lock(m_queueMutex);
-            m_queueCondVar.wait(lock, [this]{ return m_abort || !m_frameQueue.empty(); });
-            if (m_abort) {
-                break;
-            }
+            m_queueCondVar.wait(lock, [this] { return m_abort || !m_frameQueue.empty(); });
+            if (m_abort) break;
             frame = m_frameQueue.front();
             m_frameQueue.pop_front();
         }
+
         if (frame) {
             PrepareVideoFrame(frame);
             RenderVideoFilter(frame);
             glFinish();
 
             std::lock_guard<std::recursive_mutex> lock(m_listenerMutex);
-            if (m_listener) {
-                // 处理视频帧后通知外部组件
-                m_listener->OnVideoPipelineNotifyVideoFrame(frame);
-            }
+            if (m_listener) m_listener->OnVideoPipelineNotifyVideoFrame(frame);
         }
     }
+
     {
         std::lock_guard<std::mutex> lock(m_queueMutex);
         m_frameQueue.clear();
@@ -153,15 +155,4 @@ void VideoPipeline::ThreadLoop() {
     m_sharedGLContext.Destroy();
 }
 
-void VideoPipeline::NotifyVideoFrame(std::shared_ptr<IVideoFrame> videoFrame) {
-    std::lock_guard<std::mutex> lock(m_queueMutex);
-    m_frameQueue.push_back(videoFrame);
-    m_queueCondVar.notify_one();
-}
-
-void VideoPipeline::NotifyVideoFinished() {
-    std::lock_guard<std::recursive_mutex> lock(m_listenerMutex);
-    if (m_listener) m_listener->OnVideoPipelineNotifyFinished();
-}
-
-}
+}  // namespace av

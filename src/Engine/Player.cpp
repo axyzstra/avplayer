@@ -2,6 +2,10 @@
 
 namespace av {
 
+IPlayer* IPlayer::Create(GLContext glContext) {
+    return new Player(glContext);
+}
+
 void Player::InitTaskPoolGLContext() {
     m_taskPool->SubmitTask([this]() {
         m_taskPoolGLContext.Initialize();

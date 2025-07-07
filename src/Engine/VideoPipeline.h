@@ -6,12 +6,10 @@
 #include <condition_variable>
 #include <mutex>
 
-#include <QOpenGLFunctions>
-#include <QOpenGLFunctions_3_3_Core>
 
 namespace av {
 
-class VideoPipeline : public IVideoPipeline, protected QOpenGLFunctions_3_3_Core {
+class VideoPipeline : public IVideoPipeline {
 public:
     explicit VideoPipeline(GLContext& glContext);
     ~VideoPipeline() override;
