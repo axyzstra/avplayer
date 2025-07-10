@@ -88,7 +88,7 @@ private:
     std::unordered_set<std::shared_ptr<IVideoDisplayView>> m_displayViews;
     std::recursive_mutex m_displayViewsMutex;
 
-    // 用于执行需要GL环境的操作，例如销毁纹理等
+    // 用于执行需要GL环境的操作，例如销毁纹理等，即 OpenGL 的操作是单独在一个线程中操作的
     std::shared_ptr<TaskPool> m_taskPool;
 
     std::atomic<bool> m_isPlaying{false};

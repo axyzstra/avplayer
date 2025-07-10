@@ -26,6 +26,7 @@ set(HEADERS
 )
 
 add_executable(app
+    src/Writer/AudioEncoder.cpp
     ${HEADERS}
     qt/Main.cpp
     qt/MainWindow.cpp
