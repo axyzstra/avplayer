@@ -26,6 +26,9 @@ set(HEADERS
 )
 
 add_executable(app
+    src/Writer/FileWriter.cpp
+    src/Writer/Muxer.cpp
+    src/Writer/VideoEncoder.cpp
     src/Writer/AudioEncoder.cpp
     ${HEADERS}
     qt/Main.cpp

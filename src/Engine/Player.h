@@ -1,23 +1,24 @@
 #pragma once
-#include "IPlayer.h"
+
+#include <unordered_set>
+
 #include "AVSynchronizer.h"
 #include "Core/TaskPool.h"
+#include "IPlayer.h"
 #include "Interface/IAudioPipeline.h"
 #include "Interface/IAudioSpeaker.h"
 #include "Interface/IFileReader.h"
+#include "Interface/IFileWriter.h"
 #include "Interface/IVideoDisplayView.h"
 #include "Interface/IVideoPipeline.h"
-#include <unordered_set>
 
 namespace av {
-
 
 class Player : public IPlayer,
                public IFileReader::Listener,
                public AVSynchronizer::Listener,
                public IAudioPipeline::Listener,
                public IVideoPipeline::Listener {
-
 public:
     Player(GLContext& glContext);
     ~Player() override;
@@ -31,16 +32,16 @@ public:
     void Play() override;
     void Pause() override;
     void SeekTo(float progress) override;
-    bool IsPlaying() override {
-        return m_isPlaying;
-    }
+    bool IsPlaying() override;
 
     std::shared_ptr<IVideoFilter> AddVideoFilter(VideoFilterType type) override;
     void RemoveVideoFilter(VideoFilterType type) override;
 
+    bool StartRecording(const std::string& outputFilePath, int flags) override;
+    void StopRecording() override;
+    bool IsRecording() override;
 
 private:
-    // 管理任务池专用的 OpenGL Context
     void InitTaskPoolGLContext();
     void DestroyTaskPoolGLContext();
 
@@ -74,27 +75,29 @@ private:
     // 文件读取器
     std::shared_ptr<IFileReader> m_fileReader;
 
-    // 同步
+    // 音画同步
     std::shared_ptr<AVSynchronizer> m_avSynchronizer;
 
-    // 音视频处理
+    // 音视频处理管线
     std::shared_ptr<IAudioPipeline> m_audioPipeline;
     std::shared_ptr<IVideoPipeline> m_videoPipeline;
 
-    // 播放音频
+    // 音频扬声器
     std::shared_ptr<IAudioSpeaker> m_audioSpeaker;
 
-    // 播放视频
+    // 视频播放
     std::unordered_set<std::shared_ptr<IVideoDisplayView>> m_displayViews;
     std::recursive_mutex m_displayViewsMutex;
 
-    // 用于执行需要GL环境的操作，例如销毁纹理等，即 OpenGL 的操作是单独在一个线程中操作的
+    // 视频录制
+    std::shared_ptr<IFileWriter> m_fileWriter;
+    std::mutex m_fileWriterMutex;
+
+    // 用于执行需要GL环境的操作，例如销毁纹理等
     std::shared_ptr<TaskPool> m_taskPool;
 
     std::atomic<bool> m_isPlaying{false};
     std::atomic<bool> m_isRecording{false};
-
 };
 
-
-}
+}  // namespace av
