@@ -45,13 +45,13 @@ void FileWriter::NotifyVideoFrame(std::shared_ptr<IVideoFrame> videoFrame) {
 
 void FileWriter::NotifyAudioFinished() {
     auto audioSamples = std::make_shared<IAudioSamples>();
-    audioSamples->flags |= AVFrameFlag::kEOS;
+    audioSamples->flags |= static_cast<int>(AVFrameFlag::kEOS);
     NotifyAudioSamples(audioSamples);
 }
 
 void FileWriter::NotifyVideoFinished() {
     auto videoFrame = std::make_shared<IVideoFrame>();
-    videoFrame->flags |= AVFrameFlag::kEOS;
+    videoFrame->flags |= static_cast<int>(AVFrameFlag::kEOS);
     NotifyVideoFrame(videoFrame);
 }
 
