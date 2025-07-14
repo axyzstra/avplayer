@@ -18,6 +18,7 @@ set(CMAKE_AUTORCC ON)
 include_directories(./src)
 include_directories(./include)
 include_directories(./qt)
+include_directories(./3rdparty/InspireFace/include)
 
 set(HEADERS
     qt/MainWindow.h
@@ -26,6 +27,7 @@ set(HEADERS
 )
 
 add_executable(app
+    src/VideoFilter/StickerFilter.cpp
     src/Writer/FileWriter.cpp
     src/Writer/Muxer.cpp
     src/Writer/VideoEncoder.cpp
