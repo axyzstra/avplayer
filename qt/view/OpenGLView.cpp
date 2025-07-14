@@ -25,6 +25,7 @@ void OpenGLView::resizeGL(int w, int h) {
 
 void OpenGLView::paintGL() {
     if (m_videoDisplayView) m_videoDisplayView->Render(m_glWidth, m_glHeight, 0.0, 0.0, 0.0);
+    update();
 }
 
 
