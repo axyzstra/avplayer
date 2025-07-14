@@ -1,141 +1,278 @@
-#include "VideoFilter.h"
+//
+// Copyright (c) 2024 Yellow. All rights reserved.
+//
+
+#include "StickerFilter.h"
 
 #include <iostream>
 
-#include "FlipVerticalFilter.h"
-#include "GrayFilter.h"
-#include "InvertFilter.h"
-#include "StickerFilter.h"
 #include "Utils/GLUtils.h"
 
 namespace av {
 
-VideoFilter::~VideoFilter() {
-    glDeleteProgram(m_shaderProgram);
-    glDeleteVertexArrays(1, &m_vao);
-    glDeleteBuffers(1, &m_vbo);
+StickerFilter::StickerFilter() {
+    m_description.type = VideoFilterType::kSticker;
+    m_description.vertexShaderSource = R"(
+        #version 330 core
+        layout(location = 0) in vec2 a_position;
+        layout(location = 1) in vec2 a_texCoord;
+
+        out vec2 v_texCoord;
+        uniform mat4 u_model;
+        uniform bool u_isSticker;
+        uniform bool u_isKeyPoint;
+
+        void main() {
+            if (u_isKeyPoint) {
+                // 如果是关键点渲染，则只考虑位置，不需要纹理坐标
+                gl_Position = u_model * vec4(a_position, 0.0, 1.0);
+            } else {
+                // 普通纹理渲染
+                if (u_isSticker) {
+                    gl_Position = u_model * vec4(a_position, 0.0, 1.0);
+                    v_texCoord = vec2(a_texCoord.x, 1.0 - a_texCoord.y);
+                } else {
+                    gl_Position = vec4(a_position, 0.0, 1.0);
+                    v_texCoord = a_texCoord;
+                }
+            }
+        }
+    )";
+
+    m_description.fragmentShaderSource = R"(
+        #version 330 core
+        in vec2 v_texCoord;
+        out vec4 FragColor;
+
+        uniform sampler2D u_texture;
+        uniform sampler2D u_sticker;
+        uniform bool u_isSticker;
+        uniform bool u_isKeyPoint;
+        uniform vec4 u_color;  // 用于控制关键点的颜色
+
+        void main() {
+            if (u_isKeyPoint) {
+                // 如果是关键点渲染，直接输出 u_color，默认为绿色
+                FragColor = u_color;
+            } else {
+                // 普通的纹理渲染
+                vec4 color = texture(u_isSticker ? u_sticker : u_texture, v_texCoord);
+                if (u_isSticker && color.a < 0.1)
+                    discard;
+                FragColor = color;
+            }
+        }
+    )";
 }
 
-void VideoFilter::SetFloat(const std::string& name, float value) { m_floatValues[name] = value; }
+StickerFilter::~StickerFilter() {
+    if (m_stickerTexture) {
+        glDeleteTextures(1, &m_stickerTexture);
+        m_stickerTexture = 0;
+    }
 
-float VideoFilter::GetFloat(const std::string& name) { return m_floatValues[name]; }
-
-void VideoFilter::SetInt(const std::string& name, int value) { m_intValues[name] = value; }
-
-int VideoFilter::GetInt(const std::string& name) { return m_intValues[name]; }
-
-void VideoFilter::SetString(const std::string& name, const std::string& value) { m_stringValues[name] = value; }
-
-std::string VideoFilter::GetString(const std::string& name) { return m_stringValues[name]; }
-
-bool VideoFilter::Render(std::shared_ptr<IVideoFrame> frame, unsigned int outputTexture) {
-    if (!PreRender(frame, outputTexture)) return false;
-    if (!MainRender(frame, outputTexture)) return false;
-    return PostRender();
+    HFReleaseInspireFaceSession(m_session);
 }
 
-bool VideoFilter::PreRender(std::shared_ptr<IVideoFrame> frame, unsigned int outputTexture) {
-    Initialize();
-    if (!m_initialized) return false;
+void StickerFilter::SetString(const std::string& name, const std::string& value) {
+    VideoFilter::SetString(name, value);
+    if (name == "StickerPath") m_stickerPath = value;
+    if (name == "ModelPath") m_modelPath = value;
+}
 
-    // Bind FBO and attach output texture
-    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, outputTexture, 0);
+void StickerFilter::Initialize() {
+    if (m_initialized) return;
+    VideoFilter::Initialize();
+    if (m_stickerPath.empty() || m_modelPath.empty()) {
+        m_initialized = false;
+        return;
+    }
 
-    // Check if FBO is complete
-    if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
-        std::cerr << "ERROR::FRAMEBUFFER::Framebuffer is not complete!" << std::endl;
+    HFSetLogLevel(HF_LOG_NONE);
+    if (!LoadFaceDetectionModel(m_modelPath)) {
+        m_initialized = false;
+        return;
+    }
+
+    m_stickerTexture = GLUtils::LoadImageFileToTexture(m_stickerPath, m_stickerTextureWidth, m_stickerTextureHeight);
+    m_uStickerTextureLocation = glGetUniformLocation(m_shaderProgram, "u_sticker");
+    m_uModelMatrixLocation = glGetUniformLocation(m_shaderProgram, "u_model");
+    m_uIsStickerLocation = glGetUniformLocation(m_shaderProgram, "u_isSticker");
+    m_uIsKeyPointLocation = glGetUniformLocation(m_shaderProgram, "u_isKeyPoint");
+}
+
+bool StickerFilter::MainRender(std::shared_ptr<IVideoFrame> frame, unsigned int outputTexture) {
+    if (!DetectFaces(frame)) return false;
+
+    // 1. 渲染原始视频帧
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, frame->textureId);
+    glUniform1i(m_uTextureLocation, 0);
+
+    glUniform1i(m_uIsStickerLocation, GL_FALSE);   // 渲染原始视频帧
+    glUniform1i(m_uIsKeyPointLocation, GL_FALSE);  // 设置为关键点模式
+    glBindVertexArray(m_vao);
+    glDrawArrays(GL_TRIANGLE_FAN, 0, 4);  // 使用全屏渲染原始帧
+    glBindVertexArray(0);
+
+    // 2. 渲染贴纸
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, m_stickerTexture);
+    glUniform1i(m_uStickerTextureLocation, 1);
+
+    // 渲染每个检测到的人脸的贴纸
+    for (const auto& face : m_detectedFaces) {
+        // 渲染贴纸
+        glm::mat4 model = CalculateStickerModelMatrix(face.leftEye, face.rightEye, face.roll, face.yaw, face.pitch);
+        glUniformMatrix4fv(m_uModelMatrixLocation, 1, GL_FALSE, glm::value_ptr(model));
+
+        glUniform1i(m_uIsStickerLocation, GL_TRUE);    // 开始渲染贴纸
+        glUniform1i(m_uIsKeyPointLocation, GL_FALSE);  // 设置为关键点模式
+        glBindVertexArray(m_vao);
+        glDrawArrays(GL_TRIANGLE_FAN, 0, 4);  // 缩放并定位贴纸
+        glBindVertexArray(0);
+
+#if 0
+        // 3. 渲染人脸关键点（使用绿色）
+        glUniform4f(glGetUniformLocation(m_shaderProgram, "u_color"), 0.0f, 1.0f, 0.0f, 1.0f);
+
+        // 渲染关键点
+        for (const auto& point : face.keyPoints) {
+            glm::vec2 pos = point;
+            glm::mat4 model = glm::translate(glm::mat4(1.0f), glm::vec3(pos, 0.0f));
+            model = glm::scale(model, glm::vec3(0.005f, 0.003f, 1.0f));  // 适当缩放关键点大小
+
+            glUniformMatrix4fv(m_uModelMatrixLocation, 1, GL_FALSE, glm::value_ptr(model));
+            glUniform1i(m_uIsKeyPointLocation, GL_TRUE);  // 设置为关键点模式
+            glBindVertexArray(m_vao);
+            glDrawArrays(GL_TRIANGLE_FAN, 0, 4);  // 绘制关键点
+            glBindVertexArray(0);
+        }
+#endif
+    }
+
+    return true;
+}
+
+glm::mat4 StickerFilter::CalculateStickerModelMatrix(const glm::vec2& leftEye, const glm::vec2& rightEye, float roll,
+                                                     float yaw, float pitch) {
+    // 1. 计算左右眼之间的中心点作为脸部中心
+    glm::vec2 faceCenter2D = (leftEye + rightEye) * 0.5f;
+
+    // 2. 估计眼睛中心到额头的相对位置
+    float eyeDistance = glm::distance(leftEye, rightEye);
+    glm::vec3 relativeForeheadPos(0.0f, eyeDistance * 2.5f, 0.0f);  // 额头位于眼睛中心上方
+
+    // 3. 将相对额头位置应用旋转矩阵，得到旋转后的三维位置
+    glm::mat4 rotationMatrix = glm::mat4(1.0f);
+    rotationMatrix = glm::rotate(rotationMatrix, glm::radians(yaw), glm::vec3(0.0f, 1.0f, 0.0f));    // 绕Y轴
+    rotationMatrix = glm::rotate(rotationMatrix, glm::radians(pitch), glm::vec3(1.0f, 0.0f, 0.0f));  // 绕X轴
+    rotationMatrix = glm::rotate(rotationMatrix, glm::radians(-roll), glm::vec3(0.0f, 0.0f, 1.0f));  // 绕Z轴
+
+    // 4. 计算额头的绝对位置
+    glm::vec3 foreheadPos3D = glm::vec3(rotationMatrix * glm::vec4(relativeForeheadPos, 1.0f));
+    glm::vec3 faceCenter3D = glm::vec3(faceCenter2D, 0.0f);
+    glm::vec3 finalForeheadPos = faceCenter3D + foreheadPos3D;
+
+    // 5. 初始化模型矩阵
+    glm::mat4 modelMatrix = glm::mat4(1.0f);
+
+    // 6. 将贴纸平移到额头位置
+    modelMatrix = glm::translate(modelMatrix, finalForeheadPos);
+
+    // 7. 应用旋转（已经通过旋转矩阵包含在内）
+    modelMatrix *= rotationMatrix;
+
+    // 8. 缩放，确保贴纸的大小符合脸部比例
+    float scaleFactor = eyeDistance * 2.5f;  // 缩放比例，具体可调
+    modelMatrix = glm::scale(modelMatrix, glm::vec3(scaleFactor, scaleFactor, scaleFactor));
+
+    return modelMatrix;
+}
+
+bool StickerFilter::LoadFaceDetectionModel(const std::string& modelPath) {
+    if (modelPath.empty()) return false;
+
+    if (HFLaunchInspireFace(modelPath.c_str()) != HSUCCEED) {
+        std::cout << "Load Resource error: " << std::endl;
         return false;
     }
 
-    glViewport(0, 0, frame->width, frame->height);
-    glClearColor(0.0, 0.0, 0.0, 0.0);
-    glClear(GL_COLOR_BUFFER_BIT);
-    glUseProgram(m_shaderProgram);
-    return true;
-}
-
-bool VideoFilter::MainRender(std::shared_ptr<IVideoFrame> frame, unsigned int outputTexture) {
-    // Bind input texture
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, frame->textureId);
-    if (m_uTextureLocation == -1) {
-        std::cerr << "ERROR: uniform 'u_texture' not found or inactive!" << std::endl;
-    } else {
-        glUniform1i(m_uTextureLocation, 0);
+    HOption option = HF_ENABLE_QUALITY | HF_ENABLE_MASK_DETECT | HF_ENABLE_INTERACTION;
+    HFDetectMode detMode = HF_DETECT_MODE_TRACK_BY_DETECTION;
+    HInt32 maxDetectNum = 2;
+    HInt32 detectPixelLevel = 320;
+    HInt32 trackByDetectFps = 20;
+    if (HFCreateInspireFaceSessionOptional(option, detMode, maxDetectNum, detectPixelLevel, trackByDetectFps,
+                                           &m_session) != HSUCCEED) {
+        std::cout << "Create FaceContext error: " << std::endl;
+        return false;
     }
 
-    // Render quad
-    glBindVertexArray(m_vao);
-    glDrawArrays(GL_TRIANGLE_FAN, 0, 4);
-    glBindVertexArray(0);
+    HFSessionSetTrackPreviewSize(m_session, detectPixelLevel);
+    HFSessionSetFilterMinimumFacePixelSize(m_session, 0);
+
     return true;
 }
 
-bool VideoFilter::PostRender() {
-    glBindTexture(GL_TEXTURE_2D, 0);
-    return true;
-}
+bool StickerFilter::DetectFaces(std::shared_ptr<IVideoFrame> frame) {
+    if (!frame || !frame->data) return false;
 
-void VideoFilter::Initialize() {
-    if (m_initialized) return;
-    m_initialized = true;
+    HFImageData imageParam = {0};
+    imageParam.data = frame->data.get();
+    imageParam.width = frame->width;
+    imageParam.height = frame->height;
+    imageParam.rotation = HF_CAMERA_ROTATION_0;
+    imageParam.format = HF_STREAM_RGBA;
 
-    // Compile and link shaders
-    m_shaderProgram =
-        GLUtils::CompileAndLinkProgram(m_description.vertexShaderSource, m_description.fragmentShaderSource);
-
-    // Define a quad for rendering
-    float vertices[] = {
-        // Positions    // Texture Coords
-        -1.0f, 1.0f,  0.0f, 1.0f,  // Top-left
-        -1.0f, -1.0f, 0.0f, 0.0f,  // Bottom-left
-        1.0f,  -1.0f, 1.0f, 0.0f,  // Bottom-right
-        1.0f,  1.0f,  1.0f, 1.0f   // Top-right
-    };
-
-    // Setup VAO and VBO
-    glGenVertexArrays(1, &m_vao);
-    glGenBuffers(1, &m_vbo);
-
-    glBindVertexArray(m_vao);
-
-    glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
-
-    // Position attribute
-    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)0);
-    glEnableVertexAttribArray(0);
-
-    // Texture coord attribute
-    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), reinterpret_cast<void*>(2 * sizeof(float)));
-    glEnableVertexAttribArray(1);
-
-    glBindVertexArray(0);
-
-    m_uTextureLocation = glGetUniformLocation(m_shaderProgram, "u_texture");
-}
-
-int VideoFilter::GetUniformLocation(const std::string& name) {
-    auto [it, inserted] = m_uniformLocationCache.try_emplace(name, glGetUniformLocation(m_shaderProgram, name.c_str()));
-    if (it->second == -1) std::cerr << "Warning: uniform '" << name << "' doesn't exist!" << std::endl;
-    return it->second;
-}
-
-VideoFilter* VideoFilter::Create(VideoFilterType type) {
-    switch (type) {
-        case VideoFilterType::kFlipVertical:
-            return new FlipVerticalFilter();
-        case VideoFilterType::kGray:
-            return new GrayFilter();
-        case VideoFilterType::kInvert:
-            return new InvertFilter();
-        case VideoFilterType::kSticker:
-            return new StickerFilter();
-        default:
-            break;
+    HFImageStream imageHandle = {0};
+    if (HFCreateImageStream(&imageParam, &imageHandle) != HSUCCEED) {
+        std::cout << "Create ImageStream error: " << std::endl;
+        return false;
     }
 
-    return nullptr;
+    HFMultipleFaceData multipleFaceData = {0};
+    if (HFExecuteFaceTrack(m_session, imageHandle, &multipleFaceData) != HSUCCEED) {
+        std::cout << "Execute HFExecuteFaceTrack error: " << std::endl;
+        HFReleaseImageStream(imageHandle);
+        return false;
+    }
+
+    m_detectedFaces.clear();
+
+    for (int index = 0; index < multipleFaceData.detectedNum; ++index) {
+        HInt32 numOfLmk;
+        HFGetNumOfFaceDenseLandmark(&numOfLmk);
+        HPoint2f denseLandmarkPoints[numOfLmk];
+        if (HFGetFaceDenseLandmarkFromFaceToken(multipleFaceData.tokens[index], denseLandmarkPoints, numOfLmk) !=
+            HSUCCEED) {
+            std::cerr << "HFGetFaceDenseLandmarkFromFaceToken error!!" << std::endl;
+            HFReleaseImageStream(imageHandle);
+            return false;
+        }
+
+        std::vector<glm::vec2> points;
+        for (int i = 0; i < numOfLmk; ++i) {
+            // 坐标转换，映射到[-1.0, 1.0]的OpenGL坐标系
+            points.emplace_back((denseLandmarkPoints[i].x / frame->width) * 2.0f - 1.0f,
+                                1.0f - (denseLandmarkPoints[i].y / frame->height) * 2.0f);
+        }
+
+        // 转换左眼和右眼坐标
+        glm::vec2 leftEye = glm::vec2((denseLandmarkPoints[105].x / frame->width) * 2.0f - 1.0f,
+                                      1.0f - (denseLandmarkPoints[105].y / frame->height) * 2.0f);
+        glm::vec2 rightEye = glm::vec2((denseLandmarkPoints[55].x / frame->width) * 2.0f - 1.0f,
+                                       1.0f - (denseLandmarkPoints[55].y / frame->height) * 2.0f);
+
+        m_detectedFaces.push_back(DetectedFaceInfo(leftEye, rightEye, multipleFaceData.angles.roll[index],
+                                                   multipleFaceData.angles.yaw[index],
+                                                   multipleFaceData.angles.pitch[index], points));
+    }
+
+    if (HFReleaseImageStream(imageHandle) != HSUCCEED) {
+        std::cout << "Release ImageStream error: " << std::endl;
+    }
+    return multipleFaceData.detectedNum > 0;
 }
 
 }  // namespace av

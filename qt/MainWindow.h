@@ -61,6 +61,6 @@ private:
     std::unique_ptr<PlaybackListener> m_playbackListener;
     
     // OpenGL上下文管理
-    QOpenGLContext *m_mainGLContext{nullptr};
-    QOffscreenSurface *m_offscreenSurface{nullptr};
+    // QOpenGLContext *m_mainGLContext{nullptr};
+    // QOffscreenSurface *m_offscreenSurface{nullptr};
 };
