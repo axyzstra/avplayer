@@ -13,6 +13,7 @@
 #include "Engine/Player.h"
 #include "IGLContext.h"
 #include "UI/PlayerWidget.h"
+#include "UI/ControllerWidget.h"
 
 class MainWindow;
 
@@ -52,6 +53,7 @@ private:
     
     // UI组件
     PlayerWidget *m_playerWidget{nullptr};
+    ControllerWidget *m_controllerWidget{nullptr};
     QSlider *m_progressSlider{nullptr};
     
     // 播放器和回调

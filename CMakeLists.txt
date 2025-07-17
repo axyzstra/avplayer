@@ -26,7 +26,15 @@ set(HEADERS
     qt/UI/PlayerWidget.h
 )
 
+set(PROJECT_ROOT_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
+set(RESOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/resource")
+set(CACHE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/cache")
+add_definitions(-DRESOURCE_DIR="${RESOURCE_DIR}")
+add_definitions(-DCACHE_DIR="${CACHE_DIR}")
+
+
 add_executable(app
+    qt/UI/ControllerWidget.cpp
     src/VideoFilter/StickerFilter.cpp
     src/Writer/FileWriter.cpp
     src/Writer/Muxer.cpp

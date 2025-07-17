@@ -44,6 +44,8 @@ MainWindow::MainWindow() : QWidget() {
     connect(m_progressSlider, &QSlider::sliderMoved, this, &MainWindow::onSliderMoved);
     vbox->addWidget(m_progressSlider);
     
+    m_controllerWidget = new ControllerWidget(this, m_player);
+    vbox->addWidget(m_controllerWidget);
 
     // 设置窗口最小尺寸
     setMinimumWidth(1280);
